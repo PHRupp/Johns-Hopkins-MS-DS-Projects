@@ -10,7 +10,10 @@
 options(stringAsFactors = FALSE)
 
 #Seed makes the results reproducible
-set.seed(150)
+set.seed(455)
+
+#Define the % of training set to use
+training_percent <- 0.7
 
 #
 
@@ -95,6 +98,7 @@ vote_set <- read.csv(
 
 #https://en.wikipedia.org/wiki/Winnow_(algorithm)
 #http://www.cs.yale.edu/homes/aspnes/pinewiki/WinnowAlgorithm.html
+#http://www.cs.tau.ac.il/~mansour/ml-course-10/scribe4.pdf
 
 #Building the weights using the Winnow2 algorithm
 get_winnow2_weights <- function(
@@ -133,12 +137,12 @@ get_winnow2_weights <- function(
   return(col_weights)
 }
 
-#
+#Using the weights output above, we predict the values
 predict_winnow2 <- function(
   testing_data_set
   , cols_for_prediction #columns must have values 0 or 1
   , col_to_pred #column must have values 0 or 1
-  , weights
+  , col_weights
   , bounds = length(cols_for_prediction)
 ){
   #Initialize the predictions
@@ -162,60 +166,135 @@ predict_winnow2 <- function(
 
 #Analyze the data
 iris_summary <- summary(iris_set)
+iris_summary
 
 #Set the value that we want to predict
-iris_val_to_predict <- "Iris-setosa"
+iris_val_to_predict <- "Iris-versicolor"
 
 #Define the column to predict
 iris_set$Predict <- ifelse(iris_set$Class == iris_val_to_predict, 1, 0)
 
 #Define values for binary indicators for the predictions( using medians of numeric values )
-sepal_length_median <- as.numeric( trimws( substring(iris_summary[3,1], 9) ))
-sepal_width_median <- as.numeric( trimws( substring(iris_summary[3,2], 9) ))
-petal_length_median <- as.numeric( trimws( substring(iris_summary[3,3], 9) ))
-petal_width_median <- as.numeric( trimws( substring(iris_summary[3,4], 9) ))
+iris_sepal_length_binary_val <- median(iris_set$Sepal_Length)
+iris_sepal_width_binary_val <- median(iris_set$Sepal_Width)
+iris_petal_length_binary_val <- median(iris_set$Petal_Length)
+iris_petal_width_binary_val <- median(iris_set$Petal_Width)
 
-#Recreate the columns used for the prediction
-iris_set$Sepal_Length_calc <- ifelse(iris_set$Sepal_Length > sepal_length_median, 1, 0)
-iris_set$Sepal_Width_calc <- ifelse(iris_set$Sepal_Width > sepal_width_median, 1, 0)
-iris_set$Petal_Length_calc <- ifelse(iris_set$Petal_Length > petal_length_median, 1, 0)
-iris_set$Petal_Width_calc <- ifelse(iris_set$Petal_Width > petal_width_median, 1, 0)
+#Recreate the columns used for the prediction as binary indicators
+iris_set$Sepal_Length_calc <- ifelse(iris_set$Sepal_Length > iris_sepal_length_binary_val, 1, 0)
+iris_set$Sepal_Width_calc <- ifelse(iris_set$Sepal_Width > iris_sepal_width_binary_val, 1, 0)
+iris_set$Petal_Length_calc <- ifelse(iris_set$Petal_Length > iris_petal_length_binary_val, 1, 0)
+iris_set$Petal_Width_calc <- ifelse(iris_set$Petal_Width > iris_petal_width_binary_val, 1, 0)
 
 #Set the index for the columns to use for the prediction
-cols_for_prediction <- 7:10
+iris_cols_for_prediction <- 7:10
 
 #Make the portion of the training set P%
-training_size <- floor(0.75 * nrow(iris_set))
+iris_training_size <- floor(training_percent * nrow(iris_set))
 
 #define which indices will be used for the training set
-train_indices <- sample(seq_len(nrow(iris_set)), size = training_size)
+iris_train_indices <- sample(seq_len(nrow(iris_set)), size = iris_training_size)
 
 #Split the data into the training and testing set
-train_set <- iris_set[train_indices, ]
-test_set <- iris_set[-train_indices, ]
+iris_train_set <- iris_set[iris_train_indices, ]
+iris_test_set <- iris_set[-iris_train_indices, ]
 
 #Calculate the models attribute weights
 iris_weights <- get_winnow2_weights(
-  training_data_set = train_set
-  , cols_for_prediction = cols_for_prediction
+  training_data_set = iris_train_set
+  , cols_for_prediction = iris_cols_for_prediction
   , col_to_pred = 6
 )
 
 #Use the model to predict what the values are
-test_set$Predictions <- predict_winnow2(
-  testing_data_set = test_set
-  , cols_for_prediction = cols_for_prediction
+iris_test_set$Predictions <- predict_winnow2(
+  testing_data_set = iris_test_set
+  , cols_for_prediction = iris_cols_for_prediction
   , col_to_pred = 6
-  , iris_weights
+  , col_weights = iris_weights
 )
 
 #See % of successful predictions
-length( which(test_set$Predict == test_set$Predictions) ) / nrow(test_set)
+length( which(iris_test_set$Predict == iris_test_set$Predictions) ) / nrow(iris_test_set)
 
+#Clean up all variables used in the iris analysis
+iris_list <- NULL
+iris_list <- which( grepl("iris", ls(), fixed = TRUE) )
+rm(list = ls()[iris_list])
 
+#
 
+#### WINNOW: ANALYZE GLASS DATA ####
 
+#Analyze the data
+glass_summary <- summary(glass_set)
+glass_summary
 
+#Set the value that we want to predict
+glass_val_to_predict <- 5
+
+#Define the column to predict
+glass_set$Predict <- ifelse(glass_set$Type == glass_val_to_predict, 1, 0)
+
+#Define values for binary indicators for the predictions( using medians of numeric values )
+glass_ref_index_binary_val <- median(glass_set$Refractice_Index)
+glass_sodium_binary_val <- median(glass_set$Sodium)
+glass_magnesium_binary_val <- median(glass_set$Magnesium)
+glass_aluminum_binary_val <- median(glass_set$Aluminum)
+glass_silicon_binary_val <- median(glass_set$Silicon)
+glass_potassium_binary_val <- median(glass_set$Potassium)
+glass_calcium_binary_val <- median(glass_set$Calcium)
+glass_barium_binary_val <- mean(glass_set$Barium) #median was zero
+glass_iron_binary_val <- mean(glass_set$Iron) #median was zero
+
+#Recreate the columns used for the prediction
+glass_set$Refractice_Index_calc <- ifelse(glass_set$Refractice_Index > glass_ref_index_binary_val, 1, 0)
+glass_set$Sodium_calc <- ifelse(glass_set$Sodium > glass_sodium_binary_val, 1, 0)
+glass_set$Magnesium_calc <- ifelse(glass_set$Magnesium > glass_magnesium_binary_val, 1, 0)
+glass_set$Aluminum_calc <- ifelse(glass_set$Aluminum > glass_aluminum_binary_val, 1, 0)
+glass_set$Silicon_calc <- ifelse(glass_set$Silicon > glass_silicon_binary_val, 1, 0)
+glass_set$Potassium_calc <- ifelse(glass_set$Potassium > glass_potassium_binary_val, 1, 0)
+glass_set$Calcium_calc <- ifelse(glass_set$Calcium > glass_calcium_binary_val, 1, 0)
+glass_set$Barium_calc <- ifelse(glass_set$Barium > glass_barium_binary_val, 1, 0)
+glass_set$Iron_calc <- ifelse(glass_set$Iron > glass_iron_binary_val, 1, 0)
+
+#Set the index for the columns to use for the prediction
+glass_cols_for_prediction <- 13:21
+
+#Make the portion of the training set P%
+glass_training_size <- floor(training_percent * nrow(glass_set))
+
+#define which indices will be used for the training set
+glass_train_indices <- sample(seq_len(nrow(glass_set)), size = glass_training_size)
+
+#Split the data into the training and testing set
+glass_train_set <- glass_set[glass_train_indices, ]
+glass_test_set <- glass_set[-glass_train_indices, ]
+
+#Calculate the models attribute weights
+glass_weights <- get_winnow2_weights(
+  training_data_set = glass_train_set
+  , cols_for_prediction = glass_cols_for_prediction
+  , col_to_pred = 12
+)
+
+#Use the model to predict what the values are
+glass_test_set$Predictions <- predict_winnow2(
+  testing_data_set = glass_test_set
+  , cols_for_prediction = glass_cols_for_prediction
+  , col_to_pred = 12
+  , col_weights = glass_weights
+)
+
+#See % of successful predictions
+length( which(glass_test_set$Predict == glass_test_set$Predictions) ) / nrow(glass_test_set)
+
+#Clean up all variables used in the glass analysis
+glass_list <- NULL
+glass_list <- which( grepl("glass", ls(), fixed = TRUE) )
+rm(list = ls()[glass_list])
+
+#
 
 
 
