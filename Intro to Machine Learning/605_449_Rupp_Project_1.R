@@ -297,7 +297,76 @@ rm(list = ls()[glass_list])
 #
 
 
+#### WINNOW: ANALYZE vote DATA ####
 
+#Analyze the data
+summary(vote_set)
+
+#Set the value that we want to predict
+glass_val_to_predict <- 5
+
+#Define the column to predict
+vote_set$Predict <- ifelse(vote_set$Type == glass_val_to_predict, 1, 0)
+
+#Define values for binary indicators for the predictions( using medians of numeric values )
+glass_ref_index_binary_val <- median(vote_set$Refractice_Index)
+glass_sodium_binary_val <- median(vote_set$Sodium)
+glass_magnesium_binary_val <- median(vote_set$Magnesium)
+glass_aluminum_binary_val <- median(vote_set$Aluminum)
+glass_silicon_binary_val <- median(vote_set$Silicon)
+glass_potassium_binary_val <- median(vote_set$Potassium)
+glass_calcium_binary_val <- median(vote_set$Calcium)
+glass_barium_binary_val <- mean(vote_set$Barium) #median was zero
+glass_iron_binary_val <- mean(vote_set$Iron) #median was zero
+
+#Recreate the columns used for the prediction
+vote_set$Refractice_Index_calc <- ifelse(vote_set$Refractice_Index > glass_ref_index_binary_val, 1, 0)
+vote_set$Sodium_calc <- ifelse(vote_set$Sodium > glass_sodium_binary_val, 1, 0)
+vote_set$Magnesium_calc <- ifelse(vote_set$Magnesium > glass_magnesium_binary_val, 1, 0)
+vote_set$Aluminum_calc <- ifelse(vote_set$Aluminum > glass_aluminum_binary_val, 1, 0)
+vote_set$Silicon_calc <- ifelse(vote_set$Silicon > glass_silicon_binary_val, 1, 0)
+vote_set$Potassium_calc <- ifelse(vote_set$Potassium > glass_potassium_binary_val, 1, 0)
+vote_set$Calcium_calc <- ifelse(vote_set$Calcium > glass_calcium_binary_val, 1, 0)
+vote_set$Barium_calc <- ifelse(vote_set$Barium > glass_barium_binary_val, 1, 0)
+vote_set$Iron_calc <- ifelse(vote_set$Iron > glass_iron_binary_val, 1, 0)
+
+#Set the index for the columns to use for the prediction
+glass_cols_for_prediction <- 13:21
+
+#Make the portion of the training set P%
+glass_training_size <- floor(training_percent * nrow(vote_set))
+
+#define which indices will be used for the training set
+glass_train_indices <- sample(seq_len(nrow(vote_set)), size = glass_training_size)
+
+#Split the data into the training and testing set
+glass_train_set <- vote_set[glass_train_indices, ]
+glass_test_set <- vote_set[-glass_train_indices, ]
+
+#Calculate the models attribute weights
+glass_weights <- get_winnow2_weights(
+  training_data_set = glass_train_set
+  , cols_for_prediction = glass_cols_for_prediction
+  , col_to_pred = 12
+)
+
+#Use the model to predict what the values are
+glass_test_set$Predictions <- predict_winnow2(
+  testing_data_set = glass_test_set
+  , cols_for_prediction = glass_cols_for_prediction
+  , col_to_pred = 12
+  , col_weights = glass_weights
+)
+
+#See % of successful predictions
+length( which(glass_test_set$Predict == glass_test_set$Predictions) ) / nrow(glass_test_set)
+
+#Clean up all variables used in the glass analysis
+glass_list <- NULL
+glass_list <- which( grepl("glass", ls(), fixed = TRUE) )
+rm(list = ls()[glass_list])
+
+#
 
 
 
