@@ -27,7 +27,7 @@ glass_url <- paste0(source_url, "glass/glass.data")
 iris_url <- paste0(source_url, "iris/iris.data")
 vote_url <- paste0(source_url, "voting-records/house-votes-84.data")
 
-#Define the columns for the iris data
+#Define the columns for the glass data
 glass_cols <- c(
   "Id"
   , "Refractice_Index"
