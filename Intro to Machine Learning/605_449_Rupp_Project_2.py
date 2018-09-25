@@ -222,7 +222,10 @@ while( iterate_again ):
         print( "Processing Col: " + str( cols_for_calc + [col] ) )
         
         #Run Kmeans clustering and return a loss value
-        cluster_silhouette = cluster_k_means(data_set, calc_cols = cols_for_calc + [col], return_silhouette = True)
+        cluster_silhouette = cluster_k_means(data_set
+                                             , calc_cols = cols_for_calc + [col]
+                                             , return_silhouette = True
+                                             , num_clusters = 2)
         
         #keep the column with the lowest loss
         if( max_silhouette < cluster_silhouette ):
@@ -239,7 +242,10 @@ while( iterate_again ):
         cols.remove(col_to_keep)    
     
 #Spit out the valuable columns and the cluster column
-data_set.iloc[:, cols_for_calc + [len(data_set.columns)-1]].to_csv("output.DATA", index = False, header = False)
+data_set.iloc[:, cols_for_calc + [len(data_set.columns)-1]].to_csv(
+        "B:\\Users\\pathr\\Documents\\Education\\JHU\\DATA\\605.449.81.FA18\\output.DATA"
+        , index = False, header = False
+        )
 
 
 
