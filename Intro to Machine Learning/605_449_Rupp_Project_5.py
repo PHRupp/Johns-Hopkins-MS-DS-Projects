@@ -17,7 +17,6 @@ import math
 
 
 #Define the % of training set to use
-set_percent = 0.20
 num_sets = 5
 
 #Get the arguments from command prompt (given as directory containing files)
@@ -27,7 +26,7 @@ data_file = sys.argv[1]
 data_set = pandas.read_csv( data_file )
 
 #Make the portion of the training set P%
-set_size = math.floor(set_percent * len(data_set))
+set_size = math.floor( set_percent * data_set.shape[0] )
 
 #list of column names that make up the attribute names
 attr_cols = [name for name in data_set.columns[1:len(data_set.columns)] ]
@@ -58,18 +57,18 @@ class NBAttributeNode:
     def __init__(
         self
         , data_set          #
-        , attr_cols         #List of attribute column names
+        , attr_col          #List of attribute column names
         , row_nums          #Row numbers to use for the given subset
     ):
         #probability values for a given attribute value in the subset
         self.attribute_values = pandas.Series(None)
-        
+            
         #Get all the unique attribute values
         attribute_vals = list(set(data_set[attr_col][row_nums]))
         
         #Calculate the probability of each attribute value existing in the class
         for val in attribute_vals:
-        
+            
             #Get the number of instaces with this particular value in the subset
             num_instances = len( numpy.where(data_set[attr_col][row_nums] == val)[0] )
             
@@ -157,25 +156,25 @@ class NBRootNode:
         , data_set          #Pandas Data Frame of training set
         , attr_cols         #List of attribute column names
         , class_col         #Column name of the Class of the data
-        , row_nums          #Row numbers to use for the given subset
     ):
         #sub-nodes for each class
         self.classes = pandas.Series(None)
         
         #Process each class to find the probabilities
-        for class_name in list(set(data_set[class_col][row_nums])):
+        for class_name in list(set(data_set[class_col])):
             
             #Get the row numbers for the subset with only the given class
-            new_row_nums = [ i for i in numpy.where(data_set[class_col][row_nums] == class_name)[0] ]
+            new_row_nums = [ i for i in numpy.where(data_set[class_col] == class_name)[0] ]
+            new_row_nums = data_set.index[new_row_nums]
             
             #create new node with the subset for that given class' values
             self.classes.at[class_name] = NBClassNode(
                     data_set
                     , attr_cols
                     , new_row_nums
-                    , len( new_row_nums ) / len( row_nums )
+                    , len( new_row_nums ) / data_set.shape[0]
             )
-        
+            
         #End function
         return
     
@@ -219,7 +218,6 @@ class NaiveBayes:
             data_set
             , attr_cols    
             , class_col
-            , row_nums = [ x for x in range(len(data_set)) ]
         )
         
         #End function
@@ -275,7 +273,7 @@ class NaiveBayes:
                 if( record[attr_col] in self._root_node.classes[class_name].attributes[attr_col].attribute_values.index ):
                     class_probability *= self._root_node.classes[class_name].attributes[attr_col].attribute_values[ record[attr_col] ]
                 else:
-                    class_probability *= 1
+                    class_probability *= 0.00001
             
             #If the new class is more likely than the current best, then set the new best
             if( max_probability < class_probability ):
@@ -335,7 +333,8 @@ class LogisticRegression:
             
             #For the designated steps, display the loss
             if( iter_num % show_loss_step == 0 ):
-                print( 'Iter #' + str(iter_num) + '\tloss: ' + str(self.loss_function( num_array, class_array )) )
+                print( 'Iter #' + str(iter_num) )
+                print( ''.join([' '] * 2) + 'loss: ' + str(self.loss_function( num_array, class_array )) )
         
         #End function
         return
@@ -390,7 +389,7 @@ class LogisticRegression:
         return loss.mean()
         
     #
-    def predict(
+    def predict_is_class(
         self
         , data_set          #Pandas Data Frame of training set
         , attr_cols         #List of attribute column name
@@ -453,7 +452,7 @@ class Adaline:
             num_array = numpy.concatenate( (numpy.ones((num_array.shape[0], 1)), num_array), axis=1)
         
         #Initalize the weights as 0's
-        self.weights = numpy.zeros( (num_array.shape[1], 1) )
+        self.weights = numpy.array( [0.] * num_array.shape[1] )
         
         #Iterate as many times as indicated to finalize the chaning of the weights
         for iter_num in range(iterations):
@@ -467,7 +466,7 @@ class Adaline:
             #Multiply the errors by the values in each feature set to have the
             #incorrect weights have a higher error rate so that the change
             #will be greater
-            self.weights += learning_rate * num_array.T.dot( calculated_error )
+            self.weights += learning_rate * numpy.dot( num_array.T, calculated_error )
             
             #Calculate the mean squared error for the algorithm
             mean_squared_error = sum( calculated_error**2 ) / calculated_error.shape[0]
@@ -481,7 +480,7 @@ class Adaline:
 
 
     #
-    def predict(
+    def predict_is_class(
         self
         , data_set          #Pandas Data Frame of training set
         , attr_cols         #List of attribute column name
@@ -497,7 +496,7 @@ class Adaline:
             
         #Calculate the values and if they are above 0, then make 1 else -1
         output = numpy.where( numpy.dot( num_array, self.weights ) >= 0.0, 1, -1 )
-        output = [output[x][0] for x in range(output.shape[0])]
+        output = [output[x] for x in range(output.shape[0])]
     
         #End function
         return output
@@ -544,34 +543,116 @@ def classifierAccuracy(
 
 
 
-"""
-train_set = data_set
+#break a list into a number of lists
+def split_lists(my_list, num_lists):
+    new_list = []
+    
+    split_size = len(my_list) / num_lists
+    
+    for i in range(num_lists):
+        new_list.append( my_list[int(round(i * split_size)):int(round((i+1) * split_size))] )
+        
+    return new_list
 
-test_set = pandas.DataFrame({'COL1': ['A', 'D'], 'COL2': ['TEST', 'TEST'], 'COL3': ['CAR', 'CAR']})
+#define which indices will be used for the training set
+data_set_indices = list( range( len( data_set )))
+data_set_indices = random.sample(data_set_indices, len(data_set_indices))
 
-naive_bayes_model = NaiveBayes(train_set, attr_cols, class_col)
-
-naive_bayes_model.print_model()
-
-predictions = naive_bayes_model.predict_class(test_set, attr_cols)
-
-actuals = test_set[class_col]
-
-print( classifierAccuracy( actuals, predictions ) )
-"""
-
-train_set = data_set
-
-test_set = data_set.iloc[range(9)]
-
-logistic_regression_model = LogisticRegression(train_set.iloc[1:500], attr_cols, class_col, iterations = 10000, show_loss_step = 1000)
-
-print( logistic_regression_model.predict(test_set, attr_cols)  )
+#Split the indices into the defined number of sets
+set_manager = split_lists(data_set_indices, num_sets)
 
 
+#
+results = []
+predicts = []
+real_vals = []
 
+#Run through 5 iterations of rotating training / testing groups
+for iteration in range(len(set_manager)):
+    
+    #Take the first group as the test set
+    testing_set_indices = set_manager[0]
+    
+    #Remove test set from group 
+    del set_manager[0]
+    
+    #Collapse the subsets of indices into 1 large set
+    training_set_indices = [ind for subset in set_manager for ind in subset]
 
+    #Split the data into the training and testing set
+    training_set = data_set.iloc[training_set_indices, ]
+    testing_set = data_set.iloc[testing_set_indices, ]
 
+    #Add first group to end, therefore next cycle will use the next first group as test
+    #creating a "rotating" affect on the testing/training activities
+    set_manager.append( testing_set_indices )
+    
+    #Depending on the type of data input, run the particular model that the 
+    #data was staged for
+    if('in_categories' in data_file):
+        
+        #Build the model used for the prediction
+        model = NaiveBayes(training_set, attr_cols, class_col)
+        
+        #Predict the classes that the test values fall under
+        predictions = model.predict_class(testing_set, attr_cols)
+        
+    elif('in_standard' in data_file):
+    
+        #Build the model used for the prediction
+        model = LogisticRegression(
+                    training_set
+                    , attr_cols
+                    , class_col
+                    , learning_rate = 1e-6
+                    , iterations = 1000
+                    , show_loss_step = 500
+        )
+        
+        #Predict the classes that the test values fall under
+        predictions = model.predict_is_class(
+                    testing_set
+                    , attr_cols
+                    , threshold = 0.5
+        )
+    
+    elif('in_normalized' in data_file):
+     
+        #Build the model used for the prediction
+        model = Adaline(
+                    training_set
+                    , attr_cols
+                    , class_col
+                    , learning_rate = 1e-6
+                    , iterations = 10000
+                    , show_error_step = 1000
+        )
+        
+        #Predict the classes that the test values fall under
+        predictions = model.predict_is_class(
+                    testing_set
+                    , attr_cols
+                    , threshold = 0.0
+        )
+        
+    #model.print_model()
+    
+    #break
+    
+    #Take the actual classes that the data belongs to
+    actuals = [x for x in testing_set[class_col] ]
+    results.append( classifierAccuracy(actuals, predictions) )
+    
+    #Store the actual and predicted values for analysis later.
+    predicts.append(predictions)
+    real_vals.append(actuals)
+    
+print(results)    
+    
+#indices = [item for sub in set_manager for item in sub]
+#output = data_set.iloc[indices].copy() 
+#output['predict'] = [item for sub in predicts for item in sub]
+#output.to_csv("B:/Users/pathr/Documents/Education/JHU/DATA/605.449.81.FA18/out_forestfires.csv")
 
 
 
