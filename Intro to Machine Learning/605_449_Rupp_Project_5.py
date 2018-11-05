@@ -495,7 +495,7 @@ class Adaline:
             num_array = numpy.concatenate( (numpy.ones((num_array.shape[0], 1)), num_array), axis=1)
             
         #Calculate the values and if they are above 0, then make 1 else -1
-        output = numpy.where( numpy.dot( num_array, self.weights ) >= 0.0, 1, -1 )
+        output = numpy.where( numpy.dot( num_array, self.weights ) >= 0.0, 1, 0 )
         output = [output[x] for x in range(output.shape[0])]
     
         #End function
@@ -597,6 +597,9 @@ for iteration in range(len(set_manager)):
         #Predict the classes that the test values fall under
         predictions = model.predict_class(testing_set, attr_cols)
         
+        model.print_model()
+        print('\n\n')
+        
     elif('in_standard' in data_file):
     
         #Build the model used for the prediction
@@ -624,8 +627,8 @@ for iteration in range(len(set_manager)):
                     , attr_cols
                     , class_col
                     , learning_rate = 1e-6
-                    , iterations = 10000
-                    , show_error_step = 1000
+                    , iterations = 50000
+                    , show_error_step = 5000
         )
         
         #Predict the classes that the test values fall under
@@ -634,10 +637,7 @@ for iteration in range(len(set_manager)):
                     , attr_cols
                     , threshold = 0.0
         )
-        
-    #model.print_model()
-    
-    #break
+  
     
     #Take the actual classes that the data belongs to
     actuals = [x for x in testing_set[class_col] ]
@@ -648,19 +648,33 @@ for iteration in range(len(set_manager)):
     real_vals.append(actuals)
     
 print(results)    
-    
-#indices = [item for sub in set_manager for item in sub]
-#output = data_set.iloc[indices].copy() 
-#output['predict'] = [item for sub in predicts for item in sub]
-#output.to_csv("B:/Users/pathr/Documents/Education/JHU/DATA/605.449.81.FA18/out_forestfires.csv")
+
+#Print the data set out with the actual vs. predicted columns
+indices = [item for sub in set_manager for item in sub]
+output = data_set.iloc[indices].copy() 
+output['predict'] = [item for sub in predicts for item in sub]
+output['actual'] = [item for sub in real_vals for item in sub]
+output.to_csv( data_file.replace('in', 'out') )
 
 
 
 
 
+"""
+This program takes in a file and determines which type of model to run
+based on specific strings in the file name
+
+'categories'    = Naive Bayes
+
+'normalized'    = Adaline
+
+'standard'      = Logistic Regression
 
 
+Files with 'in' means that they are staged to be fed into the program
 
+Files with 'out' means that they are produced by the program
+"""
 
 
 
