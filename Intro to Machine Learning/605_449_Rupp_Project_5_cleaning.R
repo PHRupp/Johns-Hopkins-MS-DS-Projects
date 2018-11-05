@@ -349,7 +349,11 @@ write.csv(
 #Turn the numerical data into categorical based on
 #buckets made by 1st quartile, median, and 3rd quartile
 #  A < 1st quartile <= B < median <= C < 3rd quartile <= D
-categories_set <- new_data
+categories_set <- new_data[,-1]
+
+for (col in colnames(categories_set)){
+  categories_set[, col] <- paste0('_', categories_set[,col])
+}
 
 #Create data frame from the normalized matrix
 category_data <- data.frame(class = data$class, categories_set )
@@ -449,5 +453,5 @@ write.csv(
 
 
 
-#clear variables
+#### clear variables ####
 rm(list = ls())
