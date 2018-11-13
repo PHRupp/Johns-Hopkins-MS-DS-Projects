@@ -42,6 +42,28 @@ class_col = data_set.columns[0]
 ######################################################################################################################
 
 
+#Logistic Activation Function 'S' curve
+def sigmoid_curve(
+    x_vals    #Some numeric value(s) either stand alone or as Numpy Array
+):
+    #End function
+    return( 1 / (1 + numpy.exp(-x_vals)) )
+
+
+#1st derivative of the Logistic Activation Function
+def sigmoid_curve_d1(
+    x_vals    #Some numeric value(s) either stand alone or as Numpy Array
+):
+    
+    #Intermediate calculation step
+    temp = numpy.exp(-x_vals)
+    
+    #End function
+    return( temp / (1 + temp)**2 )
+
+
+
+
 class NN_Node:
     
      #
@@ -60,13 +82,32 @@ class NN_Node:
         
         #Initalize the weights as small values
         self.weights = numpy.zeros( (num_array.shape[1], num_array.shape[1]) ) + 1e-3
-
-
-
-
+        
+        #
+        self.next_node = NN_Node()
+        
+        #End function
+        return
+    
+    
+    #
+    def feed_forward(
+        self
+        , num_array              
+    ):
+        
+        #
+        new_num_array = num_array.dot( self.weights )
+        
+        #If there is no further nodes, then return output, else send to next node
+        if( self.next_node == None ):
+            return new_num_array
+        else:
+            return self.feed_forward( new_num_array )
+        
 
 #
-class LogisticRegression:
+class NeuralNetwork:
     
     #
     def __init__(
@@ -109,26 +150,7 @@ class LogisticRegression:
         return
 
 
-    #Logistic Activation Function 'S' curve
-    def sigmoid_curve(
-        self
-        , x_vals    #Some numeric value(s) either stand alone or as Numpy Array
-    ):
-        #End function
-        return( 1 / (1 + numpy.exp(-x_vals)) )
     
-    
-    #1st derivative of the Logistic Activation Function
-    def sigmoid_curve_d1(
-        self
-        , x_vals    #Some numeric value(s) either stand alone or as Numpy Array
-    ):
-        
-        #Intermediate calculation step
-        temp = numpy.exp(-x_vals)
-        
-        #End function
-        return( temp / (1 + temp)**2 )
     
   
     #
