@@ -62,9 +62,23 @@ def sigmoid_curve_d1(
     return( temp / (1 + temp)**2 )
 
 
+#
+def MSE(
+    actuals
+    , predictions
+):
+    return( (actuals - predictions)**2 )
+
+#
+def MSE_d1(
+    actuals
+    , predictions
+):
+    return( 2 * (actuals - predictions) )
 
 
-class NN_Node:
+
+class FinalLayer:
     
      #
     def __init__(
@@ -72,19 +86,14 @@ class NN_Node:
         , num_array              
         , class_array           
         , node_id        #Number of hidden nodes left to create
-        , learning_rate         #How fast the weights are changed each iteration
     ):
-
+        
         self.node_id = node_id
         
-        #If there are hidden nodes, then this will point to the next one
-        self.next_node = None
-        
         #Initalize the weights as small values
-        self.weights = numpy.zeros( (num_array.shape[1], num_array.shape[1]) ) + 1e-3
-        
-        #
-        self.next_node = NN_Node()
+        self.weights = numpy.squeeze( numpy.zeros( (num_array.shape[1], 1) ) + 1e-3 )
+        self.output = numpy.zeros( class_array.shape )
+        self.layer_vals = num_array.copy()
         
         #End function
         return
@@ -95,16 +104,107 @@ class NN_Node:
         self
         , num_array              
     ):
-        
         #
-        new_num_array = num_array.dot( self.weights )
+        self.layer_vals = num_array.copy()
         
-        #If there is no further nodes, then return output, else send to next node
-        if( self.next_node == None ):
-            return new_num_array
+        #Calculate the weighted sum to feed into function for the end output
+        #squeeze to change from (N,1) -> (N,)
+        self.output = numpy.squeeze( sigmoid_curve( num_array.dot( self.weights )))
+        
+        #End function
+        return self.output
+  
+    
+    #
+    def back_propagation(
+        self
+        , class_array
+        , learning_rate         #How fast the weights are changed each iteration
+    ):
+
+        #Get the weighted sum that gets fed into the activation function at the end
+        #squeeze to change from (N,1) -> (N,)
+        function_input = numpy.squeeze( sigmoid_curve_d1( self.layer_vals.dot( self.weights )))
+
+        #Application of the chain rule for change in the weights
+        weight_change = self.layer_vals.T.dot( MSE_d1(class_array, self.output) * function_input )
+        
+        #get weight change
+        self.weights -= weight_change * learning_rate
+        
+        #the weight changes are necessary for avoiding recalculating further within the NN
+        return weight_change    
+
+
+class HiddenLayer:
+    
+     #
+    def __init__(
+        self
+        , num_array              
+        , class_array           
+        , node_id        #Number of hidden nodes left to create
+    ):
+
+        self.node_id = node_id
+        
+        #Initalize the weights as small values
+        self.weights = numpy.zeros( (num_array.shape[1], num_array.shape[1]) ) + 1e-3
+        self.layer_vals = num_array.copy()
+        
+        #If there are hidden nodes, then this will point to the next one
+        #otherwise point to the final calculation layer
+        if( self.node_id > 1 ):
+            self.next_node = HiddenLayer(num_array, class_array, self.node_id - 1)
         else:
-            return self.feed_forward( new_num_array )
+            self.next_node = FinalLayer(num_array, class_array, 0)
         
+        #End function
+        return
+    
+    
+    #
+    def feed_forward(
+        self
+        , num_array              
+    ):
+        #
+        self.layer_vals = num_array.copy()
+        
+        #Get the new weighted sum values for all the nodes given this matrix multiplication
+        #including the activation function step
+        next_layer_vals = sigmoid_curve(  self.layer_vals.dot( self.weights ) )
+        
+        #If there are more nodes, run their feed forward, else call output
+        if( self.next_node.node_id == 0 ):
+            return self.next_node.feed_forward( next_layer_vals )
+        else:
+            return self.next_node.feed_forward( next_layer_vals )
+        
+    #
+    def back_propagation(
+        self
+        , class_array
+        , learning_rate         #How fast the weights are changed each iteration
+    ):
+
+        #
+        previous_weight_change = self.next_node.back_propagation(class_array, learning_rate)
+        
+        #find new weight change
+        print( previous_weight_change )
+
+        #adjust weights
+        
+        
+        return previous_weight_change
+
+
+
+
+
+
+
 
 #
 class NeuralNetwork:
@@ -117,7 +217,7 @@ class NeuralNetwork:
         , class_col             #Column name of the Class of the data
         , num_hidden_layers = 0 #Number of hidden layers
         , learning_rate = 1e-6  #How fast the weights are changed each iteration
-        , iterations = 1000     #Number of iterations the model will be adjusted
+        , iterations = 1        #Number of iterations the model will be adjusted
         , add_intercept = True  #Adds column of 1's so that the weights are by themselves
         , show_loss_step = 1e+9 #On this iteration, the loss will be printed
     ):
@@ -127,24 +227,28 @@ class NeuralNetwork:
         #Initialize the data frame as arrays for ease of calculations
         num_array = numpy.array( data_set[attr_cols] )
         class_array = numpy.array( data_set[class_col] )
+        calc_array = numpy.zeros( class_array.shape )
         
         #Make a numerical array from the data frame with intercept if indicated
         if( self.add_intercept ):
             num_array = numpy.concatenate( (numpy.ones((num_array.shape[0], 1)), num_array), axis=1)
         
         #Initalize the weights as 0's
-        self.weights = numpy.zeros( (num_array.shape[1], 1) )
+        if( num_hidden_layers > 0 ):
+            self.next_node = HiddenLayer(num_array, class_array, num_hidden_layers)
+        else:
+            self.next_node = FinalLayer(num_array, class_array, 0)
         
         #Iterate as many times as indicated to finalize the chaning of the weights
         for iter_num in range(iterations):
             
-            #Adjust the rates based on the learning rate
-            self.weights -= learning_rate * self.error_gradient(num_array, class_array)
+            #Calculate the output values
+            calc_array = self.next_node.feed_forward( num_array )
             
-            #For the designated steps, display the loss
-            if( iter_num % show_loss_step == 0 ):
-                print( 'Iter #' + str(iter_num) )
-                print( ''.join([' '] * 2) + 'loss: ' + str(self.loss_function( num_array, class_array )) )
+            #
+            self.next_node.back_propagation(class_array, learning_rate)
+        
+            print( sum(MSE(class_array, calc_array))/class_array.shape[0] )
         
         #End function
         return
@@ -175,93 +279,6 @@ class NeuralNetwork:
         #If value above threshold return 1 else 0
         output = numpy.where( sigmoid_set >= threshold, 1, 0 )
         output = [output[x][0] for x in range(output.shape[0])]
-    
-        #End function
-        return output
-
-######################################################################################################################
-######################################################################################################################
-######################################################################################################################
-######################################################################################################################
-##                                                       ADALINE                                                    ##
-######################################################################################################################
-######################################################################################################################
-######################################################################################################################
-######################################################################################################################
-
-
-
-#
-class Adaline:
-    
-    #
-    def __init__(
-        self
-        , data_set              #Pandas Data Frame of training set
-        , attr_cols             #List of attribute column names
-        , class_col             #Column name of the Class of the data
-        , learning_rate = 1e-6  #How fast the weights are changed each iteration
-        , iterations = 1000     #Number of iterations the model will be adjusted
-        , add_intercept = True  #Adds column of 1's so that the weights are by themselves
-        , show_error_step = 10  #On this iteration, the loss will be printed
-    ):
-        #define the addition of the intercept
-        self.add_intercept = add_intercept
-        
-        #Initialize the data frame as arrays for ease of calculations
-        num_array = numpy.array( data_set[attr_cols] )
-        class_array = numpy.array( data_set[class_col] )
-        
-        #Make a numerical array from the data frame with intercept if indicated
-        if( self.add_intercept ):
-            num_array = numpy.concatenate( (numpy.ones((num_array.shape[0], 1)), num_array), axis=1)
-        
-        #Initalize the weights as 0's
-        self.weights = numpy.array( [0.] * num_array.shape[1] )
-        
-        #Iterate as many times as indicated to finalize the chaning of the weights
-        for iter_num in range(iterations):
-            
-            #Multiply all the features for each row by the feature weights
-            calculated_values = numpy.dot( num_array, self.weights )
-            
-            #Determine the errors between the calculated values and the actual values
-            calculated_error = class_array - calculated_values
-            
-            #Multiply the errors by the values in each feature set to have the
-            #incorrect weights have a higher error rate so that the change
-            #will be greater
-            self.weights += learning_rate * numpy.dot( num_array.T, calculated_error )
-            
-            #Calculate the mean squared error for the algorithm
-            mean_squared_error = sum( calculated_error**2 ) / calculated_error.shape[0]
-            
-            #For the designated steps, display the loss
-            if( iter_num % show_error_step == 0 ):
-                print( 'Iter #' + str(iter_num) + '\tMSE: ' + str(mean_squared_error) )
-        
-        #End function
-        return
-
-
-    #
-    def predict_is_class(
-        self
-        , data_set          #Pandas Data Frame of training set
-        , attr_cols         #List of attribute column name
-        , threshold = 0.0   #Limit where class boundaries are separated
-    ):
-        
-        #Initialize the data frame as arrays for ease of calculations
-        num_array = numpy.array( data_set[attr_cols] )
-        
-        #Make a numerical array from the data frame with intercept if indicated
-        if( self.add_intercept ):
-            num_array = numpy.concatenate( (numpy.ones((num_array.shape[0], 1)), num_array), axis=1)
-            
-        #Calculate the values and if they are above 0, then make 1 else -1
-        output = numpy.where( numpy.dot( num_array, self.weights ) >= 0.0, 1, 0 )
-        output = [output[x] for x in range(output.shape[0])]
     
         #End function
         return output
@@ -305,6 +322,18 @@ def classifierAccuracy(
 ######################################################################################################################
 ######################################################################################################################
 ######################################################################################################################
+
+
+
+nn = NeuralNetwork(data_set, attr_cols, class_col, num_hidden_layers = 2)
+
+
+
+
+
+
+
+"""
 
 
 
@@ -421,6 +450,8 @@ output['predict'] = [item for sub in predicts for item in sub]
 output['actual'] = [item for sub in real_vals for item in sub]
 output.to_csv( data_file.replace('in', 'out') )
 
+
+"""
 
 
 
