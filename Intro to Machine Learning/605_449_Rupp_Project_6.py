@@ -13,7 +13,6 @@ import pandas
 import numpy
 import random
 import sys
-import math
 
 
 #Define the % of training set to use
@@ -80,7 +79,8 @@ def MSE_d1(
 
 class FinalLayer:
     
-     #
+    #Initialize the weights, output, and stored layer values
+    #layer values being the output of the previous node
     def __init__(
         self
         , num_array              
@@ -91,7 +91,7 @@ class FinalLayer:
         self.node_id = node_id
         
         #Initalize the weights as small values
-        self.weights = numpy.zeros( (num_array.shape[1], 1) ) + 1e-3
+        self.weights = numpy.random.randn( num_array.shape[1], 1 )
         self.output = numpy.zeros( (class_array.shape[0], 1) )
         self.layer_vals = num_array.copy()
 
@@ -127,7 +127,7 @@ class FinalLayer:
         #Get the weighted sum that gets fed into the activation function times elementwise the change in error
         #this is the common values that will be sent back until front of algorithm
         #change from (N,) -> (N,1)
-        error_change = MSE_d1(class_array, self.output) * sigmoid_curve_d1( self.output )
+        error_change = MSE_d1(class_array, self.output) * sigmoid_curve_d1( self.layer_vals.dot(self.weights) )
 
         #Application of the chain rule for change in the weights
         weight_change = self.layer_vals.T.dot( error_change )
@@ -145,7 +145,8 @@ class FinalLayer:
 
 class HiddenLayer:
     
-     #
+    #Initialize the weights, output, and stored layer values
+    #layer values being the output of the previous node
     def __init__(
         self
         , num_array              
@@ -156,7 +157,7 @@ class HiddenLayer:
         self.node_id = node_id
         
         #Initalize the weights as small values
-        self.weights = numpy.zeros( (num_array.shape[1], num_array.shape[1]) ) + 1e-3
+        self.weights = numpy.random.randn( num_array.shape[1], num_array.shape[1] )
         self.layer_vals = num_array.copy()
         
         #If there are hidden nodes, then this will point to the next one
@@ -183,10 +184,7 @@ class HiddenLayer:
         next_layer_vals = sigmoid_curve(  self.layer_vals.dot( self.weights ))
         
         #If there are more nodes, run their feed forward, else call output
-        if( self.next_node.node_id == 0 ):
-            return self.next_node.feed_forward( next_layer_vals )
-        else:
-            return self.next_node.feed_forward( next_layer_vals )
+        return self.next_node.feed_forward( next_layer_vals )
         
     #
     def back_propagation(
@@ -383,8 +381,9 @@ for iteration in range(len(set_manager)):
         , attr_cols
         , class_col
         , num_hidden_layers = 2
-        , iterations = 10000
-        , show_error_step = 100
+        , iterations = 25000
+        , show_error_step = 5000
+        , learning_rate = 1e-5
     )
     
     #Predict the classes that the test values fall under
