@@ -91,10 +91,10 @@ class FinalLayer:
         self.node_id = node_id
         
         #Initalize the weights as small values
-        self.weights = numpy.squeeze( numpy.zeros( (num_array.shape[1], 1) ) + 1e-3 )
-        self.output = numpy.zeros( class_array.shape )
+        self.weights = numpy.zeros( (num_array.shape[1], 1) ) + 1e-3
+        self.output = numpy.zeros( (class_array.shape[0], 1) )
         self.layer_vals = num_array.copy()
-        
+
         #End function
         return
     
@@ -108,8 +108,7 @@ class FinalLayer:
         self.layer_vals = num_array.copy()
         
         #Calculate the weighted sum to feed into function for the end output
-        #squeeze to change from (N,1) -> (N,)
-        self.output = numpy.squeeze( sigmoid_curve( num_array.dot( self.weights )))
+        self.output = sigmoid_curve( num_array.dot( self.weights ))
         
         #End function
         return self.output
@@ -121,19 +120,27 @@ class FinalLayer:
         , class_array
         , learning_rate         #How fast the weights are changed each iteration
     ):
+        #number of rows
+        N = class_array.shape[0]
+        class_array = class_array.reshape( (N, 1) )
 
-        #Get the weighted sum that gets fed into the activation function at the end
-        #squeeze to change from (N,1) -> (N,)
-        function_input = numpy.squeeze( sigmoid_curve_d1( self.layer_vals.dot( self.weights )))
+        #Get the weighted sum that gets fed into the activation function times elementwise the change in error
+        #this is the common values that will be sent back until front of algorithm
+        #change from (N,) -> (N,1)
+        error_change = MSE_d1(class_array, self.output) * sigmoid_curve_d1( self.output )
 
         #Application of the chain rule for change in the weights
-        weight_change = self.layer_vals.T.dot( MSE_d1(class_array, self.output) * function_input )
+        weight_change = self.layer_vals.T.dot( error_change )
         
         #get weight change
-        self.weights -= weight_change * learning_rate
+        self.weights += weight_change * learning_rate
+        
+        #will help with propagation as well as changes from (N,) -> (N,k)
+        #'k' being the number attributes plus a possible intercept values
+        error_change = error_change.dot( self.weights.T )
         
         #the weight changes are necessary for avoiding recalculating further within the NN
-        return weight_change    
+        return error_change    
 
 
 class HiddenLayer:
@@ -173,7 +180,7 @@ class HiddenLayer:
         
         #Get the new weighted sum values for all the nodes given this matrix multiplication
         #including the activation function step
-        next_layer_vals = sigmoid_curve(  self.layer_vals.dot( self.weights ) )
+        next_layer_vals = sigmoid_curve(  self.layer_vals.dot( self.weights ))
         
         #If there are more nodes, run their feed forward, else call output
         if( self.next_node.node_id == 0 ):
@@ -188,22 +195,24 @@ class HiddenLayer:
         , learning_rate         #How fast the weights are changed each iteration
     ):
 
-        #
-        previous_weight_change = self.next_node.back_propagation(class_array, learning_rate)
+        #getting previous error calculation in terms of (N,k)
+        #'k' being the number attributes plus a possible intercept values
+        error_change = self.next_node.back_propagation( class_array, learning_rate )
         
-        #find new weight change
-        print( previous_weight_change )
+        #elementwise multiplication of the weighted sum values entered into the activation function
+        error_change = error_change * sigmoid_curve_d1( self.layer_vals.dot( self.weights ))
 
+        #Application of the chain rule for change in the weights
+        weight_change = self.layer_vals.T.dot( error_change )
+        
         #adjust weights
+        self.weights += weight_change * learning_rate
         
+        #elementwise multiplication of the weighted sum values entered into the activation function
+        error_change = error_change.dot( self.weights.T )
         
-        return previous_weight_change
-
-
-
-
-
-
+        #the weight changes are necessary for avoiding recalculating further within the NN
+        return error_change 
 
 
 #
@@ -217,9 +226,9 @@ class NeuralNetwork:
         , class_col             #Column name of the Class of the data
         , num_hidden_layers = 0 #Number of hidden layers
         , learning_rate = 1e-6  #How fast the weights are changed each iteration
-        , iterations = 1        #Number of iterations the model will be adjusted
+        , iterations = 1000     #Number of iterations the model will be adjusted
         , add_intercept = True  #Adds column of 1's so that the weights are by themselves
-        , show_loss_step = 1e+9 #On this iteration, the loss will be printed
+        , show_error_step = 1e+9#On this iteration, the loss will be printed
     ):
         #define the addition of the intercept
         self.add_intercept = add_intercept
@@ -245,20 +254,19 @@ class NeuralNetwork:
             #Calculate the output values
             calc_array = self.next_node.feed_forward( num_array )
             
-            #
+            #adjust the weights based on gradient descent propagated throughout all hidden layers
             self.next_node.back_propagation(class_array, learning_rate)
-        
-            print( sum(MSE(class_array, calc_array))/class_array.shape[0] )
-        
+            
+            #For the designated steps, display the loss
+            if( iter_num % show_error_step == 0 ):
+                mean_squared_error = MSE(class_array, calc_array).sum()/class_array.shape[0]
+                print( 'Iter #' + str(iter_num) + '\tMSE: ' + str(mean_squared_error) )
+
         #End function
         return
 
-
-    
-    
-  
     #
-    def predict_is_class(
+    def predict(
         self
         , data_set          #Pandas Data Frame of training set
         , attr_cols         #List of attribute column name
@@ -271,15 +279,12 @@ class NeuralNetwork:
         #Make a numerical array from the data frame with intercept if indicated
         if( self.add_intercept ):
             num_array = numpy.concatenate( (numpy.ones((num_array.shape[0], 1)), num_array), axis=1)
-            
-        #Run sigmoid curve using the weighted_set as the summation of all the 
-        #attributes (0-1) with some given weights
-        sigmoid_set = self.sigmoid_curve( numpy.dot( num_array, self.weights ) )
         
-        #If value above threshold return 1 else 0
-        output = numpy.where( sigmoid_set >= threshold, 1, 0 )
-        output = [output[x][0] for x in range(output.shape[0])]
-    
+        #Calculate the values and if they are above 0, then make 1 else -1
+        output = self.next_node.feed_forward( num_array )
+        output = numpy.where( output >= threshold, 1, 0 )
+        output = [output[x] for x in range(output.shape[0])]
+        
         #End function
         return output
 
@@ -325,15 +330,6 @@ def classifierAccuracy(
 
 
 
-nn = NeuralNetwork(data_set, attr_cols, class_col, num_hidden_layers = 2)
-
-
-
-
-
-
-
-"""
 
 
 
@@ -380,58 +376,19 @@ for iteration in range(len(set_manager)):
     #Add first group to end, therefore next cycle will use the next first group as test
     #creating a "rotating" affect on the testing/training activities
     set_manager.append( testing_set_indices )
+   
+    #Build the model used for the prediction
+    model = NeuralNetwork(
+        data_set
+        , attr_cols
+        , class_col
+        , num_hidden_layers = 2
+        , iterations = 10000
+        , show_error_step = 100
+    )
     
-    #Depending on the type of data input, run the particular model that the 
-    #data was staged for
-    if('in_categories' in data_file):
-        
-        #Build the model used for the prediction
-        model = NaiveBayes(training_set, attr_cols, class_col)
-        
-        #Predict the classes that the test values fall under
-        predictions = model.predict_class(testing_set, attr_cols)
-        
-        model.print_model()
-        print('\n\n')
-        
-    elif('in_standard' in data_file):
-    
-        #Build the model used for the prediction
-        model = LogisticRegression(
-                    training_set
-                    , attr_cols
-                    , class_col
-                    , learning_rate = 1e-6
-                    , iterations = 1000
-                    , show_loss_step = 500
-        )
-        
-        #Predict the classes that the test values fall under
-        predictions = model.predict_is_class(
-                    testing_set
-                    , attr_cols
-                    , threshold = 0.5
-        )
-    
-    elif('in_normalized' in data_file):
-     
-        #Build the model used for the prediction
-        model = Adaline(
-                    training_set
-                    , attr_cols
-                    , class_col
-                    , learning_rate = 1e-6
-                    , iterations = 50000
-                    , show_error_step = 5000
-        )
-        
-        #Predict the classes that the test values fall under
-        predictions = model.predict_is_class(
-                    testing_set
-                    , attr_cols
-                    , threshold = 0.0
-        )
-  
+    #Predict the classes that the test values fall under
+    predictions = model.predict(testing_set, attr_cols)
     
     #Take the actual classes that the data belongs to
     actuals = [x for x in testing_set[class_col] ]
@@ -448,10 +405,7 @@ indices = [item for sub in set_manager for item in sub]
 output = data_set.iloc[indices].copy() 
 output['predict'] = [item for sub in predicts for item in sub]
 output['actual'] = [item for sub in real_vals for item in sub]
-output.to_csv( data_file.replace('in', 'out') )
-
-
-"""
+#output.to_csv( data_file.replace('in', 'out') )
 
 
 
