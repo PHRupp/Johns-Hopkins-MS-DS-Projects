@@ -60,8 +60,8 @@ class DTNode:
     def __init__(
         self
         , data_set          #
-        , attr_names  #
-        , class_name       #
+        , attr_names        #
+        , class_name        #
         , row_nums          #Row numbers to use for the given subset
         , lvl = 1           #Defines how deep in the tree (root = 1)
     ):

@@ -4,7 +4,16 @@ Project: #6
 Due: Sun Nov 18 23:59:59 2018
 @author: Patrick H. Rupp
 
-NOTES: First Column must be class while others are numeric
+NOTES: 
+    
+    This program takes in a file of normalized values (0-1) and runs 4 models
+    on the data. Three are neural networks with 0, 1, and 2 hidden layers while
+    the fourth is a RBF network.
+    
+    Files with 'in' means that they are staged to be fed into the program
+    
+    Files with 'out' means that they are produced by the program. These files
+    have extra columns containing the predicted outputs
 """
 
 #### DEFINE GLOBAL REQUIREMENTS ####
@@ -17,6 +26,9 @@ import sys
 
 #Define the % of training set to use
 num_sets = 5
+
+#define number of iterations for all models
+num_iterations = 10000
 
 #Get the arguments from command prompt (given as directory containing files)
 data_file = sys.argv[1]
@@ -293,6 +305,171 @@ class NeuralNetwork:
 ######################################################################################################################
 ######################################################################################################################
 ######################################################################################################################
+##                                                      RBF                                                         ##
+######################################################################################################################
+######################################################################################################################
+######################################################################################################################
+######################################################################################################################
+
+#
+class RBF:
+     
+    #
+    def __init__(
+        self
+        , data_set              #Pandas Data Frame of training set
+        , attr_cols             #List of attribute column names
+        , class_col             #Column name of the Class of the data
+        , num_centers = 4       #Number of hidden layers
+        , iterations = 1000     #Number of iterations the model will be adjusted
+        , add_intercept = True  #Adds column of 1's so that the weights are by themselves
+    ):
+        #define the addition of the intercept 
+        self.add_intercept = add_intercept
+        self.num_centers = num_centers
+        self.critical_radius = 8
+        
+        #Initialize the data frame as arrays for ease of calculations
+        num_array = numpy.array( data_set[attr_cols] )
+        class_array = numpy.array( data_set[class_col] )
+        
+        #Make a numerical array from the data frame with intercept if indicated
+        if( self.add_intercept ):
+            num_array = numpy.concatenate( (numpy.ones((num_array.shape[0], 1)), num_array), axis=1)
+        
+        #get the center coordinates for all the centers
+        self.centers, self.critical_radius = self.kmeans(num_array, self.num_centers, iterations)
+        
+        #This will be used within gaussian function for the 'width' of the curve
+        self.critical_radius = 1 / ( 2 * self.critical_radius**2 )
+        
+        #use the gaussian activation function
+        gauss_vals_center_record = self.get_record_gaussians_from_centers(num_array)
+        
+        #get the weights with pseudoinverse algorithm
+        self.weights = numpy.linalg.pinv( gauss_vals_center_record ).dot( class_array )
+    
+        #end function
+        return
+    
+    def kmeans(
+        self
+        , num_array
+        , num_centers
+        , iterations
+    ):
+                
+        #get the center coordinates for all the centers
+        #self.centers = kmeans()
+        random_indices = random.sample( range(num_array.shape[0]), num_centers )
+        clusters_array = [num_array[i,:] for i in random_indices]
+        
+        #Initialize the distance matrix of each record (row) from a cluster (column)
+        distance_matrix = numpy.zeros( (num_array.shape[0], num_centers) )
+        
+        #Adjust the cluster centers for the set amount of times
+        for i in range(iterations):
+        
+            #Calculate the distances of all points from each cluster
+            for cluster_col, cluster in enumerate(clusters_array):
+                
+                #Calculate the distances of all points from the cluster and store it in matrix
+                distance_matrix[:, cluster_col] = numpy.linalg.norm(num_array - cluster, axis = 1)
+                
+            #find which cluster each record belongs based on the minimum distance of all clusters
+            cluster_indices = numpy.argmin( distance_matrix, axis = 1 )
+                
+            #Re-calculate the positions of all the cluster centers
+            for cluster_index in set(cluster_indices):
+                
+                #Determine which records belong to that cluster
+                num_array_cluster_indices = numpy.where( cluster_indices == cluster_index )[0]
+                
+                #Get the new cluster center values based on the average of all the closest points in the cluster
+                new_cluster_vals = numpy.mean(num_array[num_array_cluster_indices, :], axis = 0)
+                
+                #Update the cluster center
+                clusters_array[cluster_index] = new_cluster_vals
+        
+        """
+        The below is to calculate the average distance of each point from its cluster center        
+        """
+        #Calculate the distances of all points from each cluster
+        for cluster_col, cluster in enumerate(clusters_array):
+            
+            #Calculate the distances of all points from the cluster and store it in matrix
+            distance_matrix[:, cluster_col] = numpy.linalg.norm(num_array - cluster, axis = 1)
+            
+        #find which cluster each record belongs based on the minimum distance of all clusters
+        cluster_distances = numpy.min( distance_matrix, axis = 1 )
+        
+        #Find the average distance each point is from it's cluster center
+        avg_distance_from_clusters = cluster_distances.sum() / cluster_distances.shape[0]
+        
+        #end function and return list of cluster centers
+        return clusters_array, avg_distance_from_clusters
+    
+    
+    #radial basis function using gaussian distribution
+    def radial_basis_gaussian(
+        self
+        , cluster_center
+        , record_vals
+    ):
+        #end function
+        return numpy.exp(-self.critical_radius * numpy.linalg.norm( (cluster_center - record_vals)**2 ))
+    
+    
+    #returns distance values for each point (row) for a given centroid center (column)
+    def get_record_gaussians_from_centers(
+        self
+        , num_array
+    ):
+        
+        #initialize the variables that will store the gaussian values of each record (rows)
+        #from each center (columns)
+        gauss_vals_center_record = numpy.zeros( (num_array.shape[0], self.num_centers) )
+        
+        #for every center, calculate the gaussian from all the points
+        for center_index, center_vals in enumerate(self.centers):
+        
+            #for a given center, calculate the gaussian for each point and store it
+            for record_index, record_vals in enumerate(num_array):
+                gauss_vals_center_record[record_index, center_index] = self.radial_basis_gaussian( center_vals, record_vals )
+        
+        #end function
+        return gauss_vals_center_record 
+        
+    
+    #
+    def predict(
+        self
+        , data_set          #Pandas Data Frame of testing set
+        , attr_cols         #List of attribute column name
+        , threshold = 0.05  #Limit where class boundaries are separated
+    ):
+        
+        #Initialize the data frame as arrays for ease of calculations
+        num_array = numpy.array( data_set[attr_cols] )
+        
+        #Make a numerical array from the data frame with intercept if indicated
+        if( self.add_intercept ):
+            num_array = numpy.concatenate( (numpy.ones((num_array.shape[0], 1)), num_array), axis=1)
+        
+        #Calculate the values and if they are above 0, then make 1 else -1
+        output = self.get_record_gaussians_from_centers(num_array).dot( self.weights )
+        output = numpy.where( output >= threshold, 1, 0 )
+        output = [output[x] for x in range(output.shape[0])]
+        
+        #end function and return predictions
+        return output
+
+
+
+######################################################################################################################
+######################################################################################################################
+######################################################################################################################
+######################################################################################################################
 ##                                             CLASSIFIER ACCURACY                                                  ##
 ######################################################################################################################
 ######################################################################################################################
@@ -351,8 +528,14 @@ set_manager = split_lists(data_set_indices, num_sets)
 
 
 #
-results = []
-predicts = []
+results_nn_0h = []
+results_nn_1h = []
+results_nn_2h = []
+results_rbf = []
+predicts_nn_0h = []
+predicts_nn_1h = []
+predicts_nn_2h = []
+predicts_rbf = []
 real_vals = []
 
 #Run through 5 iterations of rotating training / testing groups
@@ -375,55 +558,90 @@ for iteration in range(len(set_manager)):
     #creating a "rotating" affect on the testing/training activities
     set_manager.append( testing_set_indices )
    
+    print('\nNN (hidden = 0):')
     #Build the model used for the prediction
-    model = NeuralNetwork(
+    model_nn_0h = NeuralNetwork(
+        data_set
+        , attr_cols
+        , class_col
+        , num_hidden_layers = 0
+        , iterations = num_iterations
+        , show_error_step = 4000
+        , learning_rate = 1e-5
+    )
+   
+    print('\nNN (hidden = 1):')
+    #Build the model used for the prediction
+    model_nn_1h = NeuralNetwork(
+        data_set
+        , attr_cols
+        , class_col
+        , num_hidden_layers = 1
+        , iterations = num_iterations
+        , show_error_step = 4000
+        , learning_rate = 1e-5
+    )
+   
+    print('\nNN (hidden = 2):')
+    #Build the model used for the prediction
+    model_nn_2h = NeuralNetwork(
         data_set
         , attr_cols
         , class_col
         , num_hidden_layers = 2
-        , iterations = 25000
-        , show_error_step = 5000
+        , iterations = num_iterations
+        , show_error_step = 4000
         , learning_rate = 1e-5
     )
     
+    #Build the model used for the prediction
+    model_rbf = RBF(
+        data_set
+        , attr_cols
+        , class_col
+        , num_centers = 4
+        , iterations = num_iterations
+    )
+    print('\nRBF ran... trust me')
+    
     #Predict the classes that the test values fall under
-    predictions = model.predict(testing_set, attr_cols)
+    predictions_nn_0h = model_nn_0h.predict(testing_set, attr_cols)
+    predictions_nn_1h = model_nn_1h.predict(testing_set, attr_cols)
+    predictions_nn_2h = model_nn_2h.predict(testing_set, attr_cols)
+    predictions_rbf = model_rbf.predict(testing_set, attr_cols)
     
     #Take the actual classes that the data belongs to
     actuals = [x for x in testing_set[class_col] ]
-    results.append( classifierAccuracy(actuals, predictions) )
+    results_nn_0h.append( classifierAccuracy(actuals, predictions_nn_0h) )
+    results_nn_1h.append( classifierAccuracy(actuals, predictions_nn_1h) )
+    results_nn_2h.append( classifierAccuracy(actuals, predictions_nn_2h) )
+    results_rbf.append( classifierAccuracy(actuals, predictions_rbf) )
     
     #Store the actual and predicted values for analysis later.
-    predicts.append(predictions)
+    predicts_nn_0h.append(predictions_nn_0h)
+    predicts_nn_1h.append(predictions_nn_1h)
+    predicts_nn_2h.append(predictions_nn_2h)
+    predicts_rbf.append(predictions_rbf)
     real_vals.append(actuals)
     
-print(results)    
+print('\nNN (hidden = 0): ', results_nn_0h)  
+print('\nNN (hidden = 1): ', results_nn_1h)  
+print('\nNN (hidden = 2): ', results_nn_2h)  
+print('\nRBF: ', results_rbf)    
 
 #Print the data set out with the actual vs. predicted columns
 indices = [item for sub in set_manager for item in sub]
 output = data_set.iloc[indices].copy() 
-output['predict'] = [item for sub in predicts for item in sub]
+output['predict_nn_0h'] = [item for sub in predicts_nn_0h for item in sub]
+output['predict_nn_1h'] = [item for sub in predicts_nn_1h for item in sub]
+output['predict_nn_2h'] = [item for sub in predicts_nn_2h for item in sub]
+output['predict_rbf']   = [item for sub in predicts_rbf for item in sub]
 output['actual'] = [item for sub in real_vals for item in sub]
-#output.to_csv( data_file.replace('in', 'out') )
+output.to_csv( data_file.replace('in', 'out') )
 
 
 
 
-"""
-This program takes in a file and determines which type of model to run
-based on specific strings in the file name
-
-'categories'    = Naive Bayes
-
-'normalized'    = Adaline
-
-'standard'      = Logistic Regression
-
-
-Files with 'in' means that they are staged to be fed into the program
-
-Files with 'out' means that they are produced by the program
-"""
 
 
 
