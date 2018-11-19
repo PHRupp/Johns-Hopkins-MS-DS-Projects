@@ -28,7 +28,9 @@ import sys
 num_sets = 5
 
 #define number of iterations for all models
-num_iterations = 10000
+num_iterations = 5000
+mse_show_error = 5000
+my_learning_rate = 1e-6
 
 #Get the arguments from command prompt (given as directory containing files)
 data_file = sys.argv[1]
@@ -566,8 +568,8 @@ for iteration in range(len(set_manager)):
         , class_col
         , num_hidden_layers = 0
         , iterations = num_iterations
-        , show_error_step = 4000
-        , learning_rate = 1e-5
+        , show_error_step = mse_show_error
+        , learning_rate = my_learning_rate
     )
    
     print('\nNN (hidden = 1):')
@@ -578,8 +580,8 @@ for iteration in range(len(set_manager)):
         , class_col
         , num_hidden_layers = 1
         , iterations = num_iterations
-        , show_error_step = 4000
-        , learning_rate = 1e-5
+        , show_error_step = mse_show_error
+        , learning_rate = my_learning_rate
     )
    
     print('\nNN (hidden = 2):')
@@ -590,8 +592,8 @@ for iteration in range(len(set_manager)):
         , class_col
         , num_hidden_layers = 2
         , iterations = num_iterations
-        , show_error_step = 4000
-        , learning_rate = 1e-5
+        , show_error_step = mse_show_error
+        , learning_rate = my_learning_rate
     )
     
     #Build the model used for the prediction
@@ -605,9 +607,9 @@ for iteration in range(len(set_manager)):
     print('\nRBF ran... trust me')
     
     #Predict the classes that the test values fall under
-    predictions_nn_0h = model_nn_0h.predict(testing_set, attr_cols)
-    predictions_nn_1h = model_nn_1h.predict(testing_set, attr_cols)
-    predictions_nn_2h = model_nn_2h.predict(testing_set, attr_cols)
+    predictions_nn_0h = model_nn_0h.predict(testing_set, attr_cols, threshold = 0.1)
+    predictions_nn_1h = model_nn_1h.predict(testing_set, attr_cols, threshold = 0.1)
+    predictions_nn_2h = model_nn_2h.predict(testing_set, attr_cols, threshold = 0.1)
     predictions_rbf = model_rbf.predict(testing_set, attr_cols)
     
     #Take the actual classes that the data belongs to
