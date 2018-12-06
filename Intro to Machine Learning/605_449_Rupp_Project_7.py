@@ -40,6 +40,67 @@ map_filepath = sys.argv[1]
 ######################################################################################################################
 ######################################################################################################################
 
+class State:
+    
+    def __init__(
+        self
+        , x
+        , y
+        , Vx
+        , Vy
+    ):
+        #set the object values
+        self.x = x
+        self.y = y
+        self.Vx = Vx
+        self.Vy = Vy
+        
+        #end function
+        return
+    
+    #
+    def get_new_state(
+        self
+        , Ax
+        , Ay
+        , probability_threshold = 0.2
+    ):
+        
+        #Change the state based on if the acceleration action happens or not
+        if( numpy.random.random_sample() >= probability_threshold ):
+            
+            #Calculate the new state
+            new_Vy = self.Vy + Ay
+            new_Vx = self.Vx + Ax
+            new_y = self.y + new_Vy
+            new_x = self.x + new_Vx
+            
+            #Define the new state based on the actions given
+            new_state = State(
+                new_x
+                , new_y
+                , new_Vx
+                , new_Vy
+            )
+            
+        else:
+            
+            #Calculate the new state without the action
+            new_y = self.y + self.Vy
+            new_x = self.x + self.Vx
+            
+            #Define the new state based on the actions given
+            new_state = State(
+                new_x
+                , new_y
+                , self.Vx
+                , self.Vy
+            )
+        
+        return new_state
+
+
+
 
 class TrackManager:
     
@@ -56,6 +117,7 @@ class TrackManager:
         self
         , map_filepath
     ):
+        
         #
         self.map_filepath = map_filepath
         
@@ -83,6 +145,20 @@ class TrackManager:
                 
         #close the file connection
         map_file.close()
+        
+        #initialize all the boundary conditions
+        self.min_x = 0
+        self.max_x = map_size_array[1] - 1
+        self.min_y = 0
+        self.max_y = map_size_array[0] - 1
+        self.min_Vx = -5
+        self.max_Vx = 5
+        self.min_Vy = -5
+        self.max_Vy = 5
+        self.min_Ax = -1
+        self.max_Ax = 1
+        self.min_Ay = -1
+        self.max_Ay = 1
         
         #end function
         return
@@ -165,12 +241,13 @@ all_position_states =  map_size_array[0] * map_size_array[1]
 all_V_states = (max_Vy - min_Vy + 1) * (max_Vx - min_Vx + 1)
 
 #size of all possible accelerations (Ay, Ax) from
-num_actions_Ay = 3
-num_actions_Ax = 3
-all_actions = num_actions_Ay * num_actions_Ax
+all_actions = (max_Ay - min_Ay + 1) * (max_Ax - min_Ax + 1)
 
 #create the table of possible values for all states (rows) given actions (columns)
 Q = numpy.zeros( (all_position_states * all_V_states, all_actions) )
+
+#create the table of possible values for all states (rows)
+Vals = numpy.zeros( (all_position_states * all_V_states,) )
 
 
 
@@ -246,11 +323,21 @@ def get_reward(
     , x
     , Ay
     , Ax
-    , min_
+    , min_Vy = 0    #integer
+    , max_Vy = 0    #integer
+    , min_Vx = 0    #integer
+    , max_Vx = 0    #integer
+    , min_y = 0     #integer
+    , max_y = 0     #integer
+    , min_x = 0     #integer
+    , max_x = 0     #integer
 ):
     
     #Is the car currently on the track?
     current_car_on_track = map_vals[y,x] in [1, 2]
+    
+    if( not current_car_on_track ):
+        return(-50)
     
     #Calculate the new state
     new_Vy = Vy + Ay
@@ -282,20 +369,22 @@ def get_reward(
     elif( new_y < min_y ):
         new_y = min_y
     
+    print(new_y,new_x,new_Vy,new_Vx)
+    
     #Is the car going to be on the track?
-    future_car_on_track = map_vals[new_y,new_x] in [1, 2]
+    future_car_on_track = map_vals[new_y,new_x] in [1, 2, 3]
     
     #determine the path that the car took (can be descending or ascending)
     if( x < new_x ):
-        path_x = [i for i in range(x, new_x+1, 1)]
+        path_x = [i for i in range(x, new_x+1)]
     else: 
-        path_x = [i for i in range(x, new_x+1, -1)]
+        path_x = [i for i in range(new_x, x+1)]
        
     #determine the path that the car took (can be descending or ascending)
     if( y < new_y ):
-        path_y = [i for i in range(y, new_y+1, 1)]
+        path_y = [i for i in range(y, new_y+1)]
     else: 
-        path_y = [i for i in range(y, new_y+1, -1)]
+        path_y = [i for i in range(new_y, y+1)]
     
     #move along the x with constant y then move in y with constant x to find the walls
     path_x_has_wall = sum([map_vals[y,_x] == 0 for _x in path_x]) > 0
@@ -318,20 +407,30 @@ def get_reward(
     #move from track to the wall
     if( current_car_on_track and path_has_wall ):
         return(-10)
-    
+   
+    #end function
     return None
 
 
-
-
-
-
-
-
-
-
-
-
+#
+print(
+get_reward(
+    Vy = 0
+    , Vx = -3
+    , y = 6
+    , x = 2
+    , Ay = 0
+    , Ax = 0
+    , min_Vy = min_Vy
+    , max_Vy = max_Vy
+    , min_Vx = min_Vx
+    , max_Vx = max_Vx
+    , min_y = min_y
+    , max_y = max_y
+    , min_x = min_x
+    , max_x = max_x
+)
+)
 
 
 
